@@ -57,7 +57,7 @@ reject = {
     "decisions": [
         {
             "type": "reject",
-            "message": "Write a new draft"
+            "message": "Do not send an email. The email needs more context or additionans from the user."
         }
     ]
 }
@@ -127,15 +127,34 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
     description = st.session_state.agent_responses['__interrupt__'][-1].value['action_requests'][-1]
     st.warning(f"Human intervention required for tool: {description['name']}")
 
-    if st.button("Approve", key="approve"):
-        agent = st.session_state["agent"]
-        result = agent.invoke(
-            Command(
-                resume=decisions.get("approve")
-            ),
-            config=st.session_state.memory_config
-        )
-        st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
-        st.session_state.stage = "input"
-        st.rerun()
+    buttons = st.columns(6)
+    with buttons[0]:
+        if st.button("Approve", key="approve", type="primary", width="stretch", help="Approve the email"):
+            agent = st.session_state["agent"]
+            result = agent.invoke(
+                Command(
+                    resume=decisions.get("approve")
+                ),
+                config=st.session_state.memory_config
+            )
+            st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
+            st.session_state.stage = "input"
+            st.rerun()
 
+    with buttons[1]:
+        if st.button("Reject", key="reject", type="secondary", width="stretch", help="Reject the email"):
+            agent = st.session_state["agent"]
+            result = agent.invoke(
+                Command(
+                    resume=decisions.get("reject")
+                ),
+                config=st.session_state.memory_config
+            )
+            st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
+            st.session_state.stage = "input"
+            st.rerun()
+
+    with buttons[2]:
+        if st.button("Edit", key="edit", type="secondary", width="stretch", help="Edit the email"):
+            pass    
+            st.session_state.stage = "input"
