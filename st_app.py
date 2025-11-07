@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langchain.agents.middleware import HumanInTheLoopMiddleware
 
 from langgraph.checkpoint.memory import InMemorySaver 
+from langgraph.types import Command
 import uuid
 
 from dotenv import load_dotenv
@@ -23,6 +24,50 @@ def send_email(recipient: str, subject: str, body: str) -> str:
     """
     return f"Email sent successfully to {recipient}"
 
+# Choose decision
+# Approval decision
+approval = {
+    "decisions": [
+        {
+            "type": "approve"
+        }
+    ]
+}
+
+# Decisions to parse to tool interruption
+# Edit decision
+edit = {
+    "decisions": [
+        {
+            "type": "edit",
+            "edited_action": {
+                "name": "send_email",
+                "args": {
+                    "recipient": "partner@startup.com",
+                    "subject": "Budget proposal for Q1 2026",
+                    "body": "I can only approve up to 500k, please send over details.",
+                }
+            }
+        }
+    ]
+}
+
+# Reject decision
+reject = {
+    "decisions": [
+        {
+            "type": "reject",
+            "message": "Write a new draft"
+        }
+    ]
+}
+# single dictionary to index into and return the correct dict
+decisions = {
+    "approve": approval,
+    "edit": edit,
+    "reject": reject,
+}
+
 # Sidebar # TODO: Add ability to set OpenAI API key
 # with st.sidebar:
     # openai_api_key = st.text_input("OpenAI API key", type="password")
@@ -37,7 +82,7 @@ if "agent" not in st.session_state:
         model="openai:gpt-4o",
         tools=[send_email],
         system_prompt="You are a helpful email assistant",
-        # middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": True})],
+        middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject"]}})],
         checkpointer=st.session_state["checkpointer"],
     )
 
@@ -66,6 +111,31 @@ if user_input := st.chat_input("Ask me to send an email"):
     )
 
     agent_response_message = agent_response["messages"][-1].content
+    if "__interrupt__" in agent_response:
+        action_request = agent_response['__interrupt__'][-1].value['action_requests'][-1]
+        recipient = action_request['args']['recipient']
+        subject = action_request['args']['subject']
+        body = action_request['args']['body']
+        agent_response_message = f"**To:** {recipient}\n\n**Subject:** {subject}\n\n**Body:**\n\n{body}"
+        st.session_state.stage = "intervention"
     st.session_state.history.append({"role": "assistant", "content": agent_response_message})
     st.session_state.agent_responses = agent_response
     st.rerun()
+
+if "__interrupt__" in st.session_state.agent_responses and st.session_state.stage == "intervention":
+    # Extract initial AI message requiring human intervention
+    description = st.session_state.agent_responses['__interrupt__'][-1].value['action_requests'][-1]
+    st.warning(f"Human intervention required for tool: {description['name']}")
+
+    if st.button("Approve", key="approve"):
+        agent = st.session_state["agent"]
+        result = agent.invoke(
+            Command(
+                resume=decisions.get("approve")
+            ),
+            config=st.session_state.memory_config
+        )
+        st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
+        st.session_state.stage = "input"
+        st.rerun()
+
