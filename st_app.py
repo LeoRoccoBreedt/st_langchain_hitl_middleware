@@ -23,7 +23,25 @@ def send_email(recipient: str, subject: str, body: str) -> str:
     Returns:
         Confirmation message.
     """
-    return f"Email sent successfully to {recipient}"
+    return f"Email sent successfully to {recipient}, regarding '{subject}'."
+
+@st.dialog("Edit Email", width="medium")
+def edit_email():
+    recipient = st.text_input(
+        "Recipient",
+        value=st.session_state.get("email", {}).get("recipient", "")
+    )
+    subject = st.text_input("Subject", value=st.session_state.get("email", {}).get("subject", ""))
+    body = st.text_area("Body", value=st.session_state.get("email", {}).get("body", ""))
+
+    if st.button("Send"):
+        st.session_state["email"] = {
+            "recipient": recipient,
+            "subject": subject,
+            "body": body,
+        }
+        st.session_state["email_edited"] = True  # Set the flag to indicate the email was edited
+        st.rerun()  # Rerun to update the state
 
 # Choose decision
 # Approval decision
@@ -89,10 +107,10 @@ if "checkpointer" not in st.session_state:
 
 if "agent" not in st.session_state:
     st.session_state["agent"] = create_agent(
-        model="openai:gpt-4o",
+        model="openai:gpt-4o-mini",
         tools=[send_email],
-        system_prompt="You are a helpful email assistant",
-        middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject"]}})],
+        system_prompt="You are a helpful email assistant for Leo. Always return a message to the user confirming the action taken.",
+        middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject", "edit"]}})],
         checkpointer=st.session_state["checkpointer"],
     )
 
@@ -102,6 +120,9 @@ st.title("🦜🔗 Email Assistant")
 st.session_state.history = st.session_state.get("history", [])
 st.session_state.stage = st.session_state.get("stage", "input")
 st.session_state.agent_responses = st.session_state.get("agent_responses", [])
+#st.session_state["email"] = st.session_state.get("email", {"recipient": "", "subject": "", "body": ""})
+# ensure there's always an 'email' dict in session_state
+st.session_state.setdefault("email", {"recipient": "", "subject": "", "body": ""})
 
 # initialize memory_config only if missing
 st.session_state.setdefault("memory_config", {"configurable": {"thread_id": str(uuid.uuid4())}})
@@ -128,6 +149,13 @@ if user_input := st.chat_input("Ask me to send an email"):
         body = action_request['args']['body']
         agent_response_message = f"**To:** {recipient}\n\n**Subject:** {subject}\n\n**Body:**\n\n{body}"
         st.session_state.stage = "intervention"
+
+        st.session_state["email"] = {
+            "recipient": recipient,
+            "subject": subject,
+            "body": body,
+        }
+    
     st.session_state.history.append({"role": "assistant", "content": agent_response_message})
     st.session_state.agent_responses = agent_response
     st.rerun()
@@ -149,6 +177,7 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
+            st.session_state["agent_responses"] = result
             st.rerun()
 
     with buttons[1]:
@@ -166,5 +195,33 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
 
     with buttons[2]:
         if st.button("Edit", key="edit", type="secondary", width="stretch", help="Edit the email"):
-            pass    
+            st.session_state["email_edited"] = False
+            edit_email()
+
+        # Only proceed if user actually confirmed the edit
+        if st.session_state.get("email_edited"):
+            agent = st.session_state["agent"]
+            result = agent.invoke(
+                Command(
+                    resume = {
+                        "decisions": [
+                            {
+                                "type": "edit",
+                                "edited_action": {
+                                    "name": "send_email",
+                                    "args": st.session_state["email"]
+                                }
+                            }
+                        ]
+                    }),
+                config=st.session_state.memory_config 
+            )
+            st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
+            st.success("Email edited and sent!")
+
+            st.session_state["agent_responses"] = result
+
+            st.rerun()
+
+st.write(st.session_state["agent_responses"])
