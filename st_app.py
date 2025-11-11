@@ -8,6 +8,7 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langgraph.checkpoint.memory import InMemorySaver 
 from langgraph.types import Command
 import uuid
+import os
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -69,8 +70,17 @@ decisions = {
 }
 
 # Sidebar # TODO: Add ability to set OpenAI API key
-# with st.sidebar:
-    # openai_api_key = st.text_input("OpenAI API key", type="password")
+with st.sidebar:
+    api_key = st.text_input(
+        "OpenAI API key",
+        value=st.session_state.get("api_key") or os.getenv("OPENAI_API_KEY", ""),
+        type="password",
+        icon=":material/password:")
+    
+    #Set session state for use of API and the environment variable for the create_agent
+    if api_key:
+        st.session_state["api_key"] = api_key
+        os.environ["OPENAI_API_KEY"] = api_key
 
 #config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 # config and agent: create once and keep in session_state so reruns don't recreate them
