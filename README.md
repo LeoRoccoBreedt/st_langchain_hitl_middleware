@@ -62,17 +62,22 @@ Open and run the notebook with your preferred Jupyter tooling to step through th
 
 - Built with Streamlit for the web interface
 - Uses LangChain for the AI agent implementation
-- HumanInTheLoopMiddleware handles tool interruptions and allowed decisions
-- InMemorySaver used for checkpointing in examples
+- HumanInTheLoopMiddleware handles tool interruptions with allowed decisions: `approve`, `reject`, `edit`
+- InMemorySaver used for checkpointing
 - Session state is used to persist agent, checkpointer and memory configuration across reruns
-- OpenAI GPT-4o model for natural language understanding
+- OpenAI GPT-4o-mini model for natural language understanding and email composition
 
 ## Changelog
 
-### v0.2.0 — Approval workflow update
+### v0.1.1 — Approval workflow update
 - Added human-in-the-loop approval workflow to the Streamlit app:
   - UI buttons for Approve / Reject / Edit with an email preview.
   - Interrupt handling to extract action requests and present them for human decision.
+  - Edit dialog allows users to modify email details before sending.
+- Persist agent, checkpointer and memory_config in st.session_state to avoid recreating them on reruns.
+- Ensured memory_config (thread_id) is initialized once per session and reused for agent invocations.
+- Updated to use GPT-4o-mini model for cost optimization.
+- Agent system prompt now confirms all actions to the user.
 - Minor UI improvements to show assistant preview and intervention stage.
 
 ### v0.1.0 — Initial release
