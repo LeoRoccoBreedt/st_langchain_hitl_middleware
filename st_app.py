@@ -99,6 +99,8 @@ with st.sidebar:
     if api_key:
         st.session_state["api_key"] = api_key
         os.environ["OPENAI_API_KEY"] = api_key
+    else:
+        st.warning("Please enter your OpenAI API key to use the app.")
 
 #config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 # config and agent: create once and keep in session_state so reruns don't recreate them
