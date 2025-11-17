@@ -1,6 +1,6 @@
 # Streamlit LangChain Email Assistant
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit-badge_black_white.svg)](https://stlangchainhitlmiddleware-fr2zh8xrql6ponturgtb25.streamlit.app)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://st-langchain-hitl-middleware.streamlit.app)
 
 
 A simple Streamlit app demonstrating LangChain integration with human-in-the-loop capabilities. The app serves as an AI email assistant that can help compose and (simulate) sending emails.
