@@ -80,6 +80,9 @@ Open and run the notebook with your preferred Jupyter tooling to step through th
 
 ## Changelog
 
+### v0.2.1 — API key session isolation
+- Improved API key handling on Streamlit Cloud: OpenAI key is now passed directly to `ChatOpenAI` rather than via environment variables, ensuring keys are scoped to each user session
+
 ### v0.2.0 — Observability, UI improvements & cloud stability
 - Added optional OPIK observability via `OpikTracer` integration for LangChain
 - Fixed `opik.configure()` hanging on Streamlit Cloud by passing `api_key` and `automatic_approvals=True` to skip interactive prompts
