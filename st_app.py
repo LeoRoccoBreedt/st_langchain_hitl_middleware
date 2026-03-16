@@ -88,7 +88,7 @@ decisions = {
 }
 
 with st.sidebar:
-    st.header("Model provider")
+    st.header("Model provider", divider="grey")
     model_provider = st.selectbox("Select provider", options=["OpenAI", "Claude"])
     api_key = st.text_input(
         model_provider + " API key",
@@ -103,8 +103,9 @@ with st.sidebar:
     else:
         st.warning("Please enter your OpenAI API key to use the app.")
 
-    st.header("Observability by OPIK")
-    observe = st.toggle("Add observability", value=False)
+    st.header("Observability by OPIK", divider="grey")
+    st.markdown("[What is OPIK?](https://www.comet.com/docs/opik/)", unsafe_allow_html=True)
+    observe = st.toggle("Add observability", value=False, help="Enable to send traces of agent interactions to OPIK for monitoring and analysis")
 
     if observe:
         import opik
@@ -130,8 +131,29 @@ with st.sidebar:
             opik.configure(use_local=False)
             # Set up the Opik tracer and store it in session state for use in agent config
             opik_tracer = OpikTracer(project_name=opik_project)
-        else:            
+        else:
             st.warning("Please enter your OPIK API key to enable observability.")
+
+    st.header("Resources", help="Links to the GitHub repo and Colab notebook for this demo", divider="grey")
+    st.markdown(
+        """
+        <div style="font-size: 0.95rem; color: gray;">
+            <a href="https://github.com/LeoRoccoBreedt/st_langchain_hitl_middleware" target="_blank" style="color: inherit; text-decoration: none; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                GitHub
+            </a>
+            <a href="https://colab.research.google.com/github/LeoRoccoBreedt/st_langchain_hitl_middleware/blob/main/example_hitl_middleware.ipynb" target="_blank" style="color: inherit; text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#F9AB00">
+                    <path d="M16.9414 4.9757a7.033 7.033 0 0 0-4.9308 2.0646 7.033 7.033 0 0 0-.1232 9.8068l2.395-2.395a3.6455 3.6455 0 0 1 5.1497-5.1478l2.397-2.3989a7.033 7.033 0 0 0-4.8877-1.9297zM7.07 4.9855a7.033 7.033 0 0 0-4.8878 1.9316l2.3911 2.3911a3.6434 3.6434 0 0 1 5.0227.1271l1.7341-2.9737-.0997-.0802A7.033 7.033 0 0 0 7.07 4.9855zm15.0093 2.1721l-2.3892 2.3911a3.6455 3.6455 0 0 1-5.1497 5.1497l-2.4067 2.4068a7.0362 7.0362 0 0 0 9.9456-9.9476zM1.932 7.1674a7.033 7.033 0 0 0-.002 9.6816l2.397-2.397a3.6434 3.6434 0 0 1-.004-4.8916zm7.664 7.4235c-1.38 1.3816-3.5863 1.411-5.0168.1134l-2.397 2.395c2.4693 2.3328 6.263 2.5753 9.0072.5455l.1368-.1115z"/>
+                </svg>
+                Open in Colab
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 #config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 # config and agent: create once and keep in session_state so reruns don't recreate them
