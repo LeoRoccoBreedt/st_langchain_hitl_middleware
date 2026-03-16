@@ -1,6 +1,7 @@
 import streamlit as st
 
 # LangChain code
+from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain.agents.middleware import HumanInTheLoopMiddleware
@@ -99,7 +100,6 @@ with st.sidebar:
     #Set session state for use of API and the environment variable for the create_agent
     if api_key:
         st.session_state["api_key"] = api_key
-        os.environ["OPENAI_API_KEY"] = api_key
     else:
         st.warning("Please enter your OpenAI API key to use the app.")
 
@@ -126,7 +126,6 @@ with st.sidebar:
 
         if opik_key:
             st.session_state["opik_key"] = opik_key
-            os.environ["OPIK_API_KEY"] = opik_key
 
             if not st.session_state.get("opik_configured"):
                 opik.configure(use_local=False, api_key=opik_key, automatic_approvals=True)
@@ -172,8 +171,9 @@ if "checkpointer" not in st.session_state:
     st.session_state["checkpointer"] = InMemorySaver()
 
 if "agent" not in st.session_state:
+    model = ChatOpenAI(model="gpt-4o-mini", api_key=st.session_state["api_key"])
     st.session_state["agent"] = create_agent(
-        model="openai:gpt-4o-mini",
+        model=model,
         tools=[send_email],
         system_prompt="You are a helpful email assistant for Leo. Always return a message to the user confirming the action taken.",
         middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject", "edit"]}})],
