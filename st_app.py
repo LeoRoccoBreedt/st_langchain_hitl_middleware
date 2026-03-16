@@ -10,11 +10,8 @@ from langgraph.types import Command
 import uuid
 import os
 
-IS_CLOUD = os.getenv("STREAMLIT_SERVER_HEADLESS") == "true"
-
-if not IS_CLOUD:
-    from dotenv import load_dotenv
-    load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
 
 @tool()
 def send_email(recipient: str, subject: str, body: str) -> str:
@@ -95,7 +92,7 @@ with st.sidebar:
     model_provider = st.selectbox("Select provider", options=["OpenAI", "Claude"])
     api_key = st.text_input(
         model_provider + " API key",
-        value=st.session_state.get("api_key") or ("" if IS_CLOUD else os.getenv("OPENAI_API_KEY", "")),
+        value=st.session_state.get("api_key") or os.getenv("OPENAI_API_KEY", ""),
         type="password",
         icon=":material/password:")
     
@@ -122,7 +119,7 @@ with st.sidebar:
 
         opik_key = st.text_input(
             "OPIK API Key",
-            value=st.session_state.get("opik_key") or ("" if IS_CLOUD else os.getenv("OPIK_API_KEY", "")),
+            value=st.session_state.get("opik_key") or os.getenv("OPIK_API_KEY", ""),
             type="password",
             icon=":material/password:"
         )
