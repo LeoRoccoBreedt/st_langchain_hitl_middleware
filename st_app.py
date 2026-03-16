@@ -87,10 +87,11 @@ decisions = {
     "reject": reject,
 }
 
-# Sidebar # TODO: Add ability to set OpenAI API key
 with st.sidebar:
+    st.header("Model provider")
+    model_provider = st.selectbox("Select provider", options=["OpenAI", "Claude"])
     api_key = st.text_input(
-        "OpenAI API key",
+        model_provider + " API key",
         value=st.session_state.get("api_key") or os.getenv("OPENAI_API_KEY", ""),
         type="password",
         icon=":material/password:")
@@ -101,6 +102,30 @@ with st.sidebar:
         os.environ["OPENAI_API_KEY"] = api_key
     else:
         st.warning("Please enter your OpenAI API key to use the app.")
+
+    st.header("Observability by OPIK")
+    observe = st.toggle("Add observability", value=False)
+
+    if observe:
+        import opik
+        from opik.integrations.langchain import OpikTracer
+
+        opik_key = st.text_input(
+            "OPIK API Key",
+            value=st.session_state.get("opik_key") or os.getenv("OPIK_API_KEY", ""),
+            type="password",
+            icon=":material/password:"
+        )
+
+        if opik_key:
+            st.session_state["opik_key"] = opik_key
+            os.environ["OPIK_API_KEY"] = opik_key
+
+            opik.configure(use_local=False)
+            # Set up the Opik tracer and store it in session state for use in agent config
+            opik_tracer = OpikTracer(project_name="Email_assistant_with_LangChain")
+        else:            
+            st.warning("Please enter your OPIK API key to enable observability.")
 
 #config = {"configurable": {"thread_id": str(uuid.uuid4())}}
 # config and agent: create once and keep in session_state so reruns don't recreate them
@@ -116,7 +141,7 @@ if "agent" not in st.session_state:
         checkpointer=st.session_state["checkpointer"],
     )
 
-st.title("🦜🔗 Email Assistant")
+st.title("Email Assistant")
 
 # Create session state parameters
 st.session_state.history = st.session_state.get("history", [])
@@ -126,8 +151,11 @@ st.session_state.agent_responses = st.session_state.get("agent_responses", [])
 # ensure there's always an 'email' dict in session_state
 st.session_state.setdefault("email", {"recipient": "", "subject": "", "body": ""})
 
-# initialize memory_config only if missing
-st.session_state.setdefault("memory_config", {"configurable": {"thread_id": str(uuid.uuid4())}})
+# initialize invoke_config only if missing
+st.session_state["invoke_config"] = {
+    "configurable": st.session_state.get("invoke_config", {}).get("configurable") or {"thread_id": str(uuid.uuid4())},
+    "callbacks": [opik_tracer] if observe and 'opik_tracer' in dir() else []
+}
 
 for message in st.session_state.history:
     with st.chat_message(message["role"]):
@@ -140,7 +168,7 @@ if user_input := st.chat_input("Ask me to send an email"):
     agent = st.session_state["agent"]
     agent_response = agent.invoke(
         {"messages": [{"role": "user", "content": user_input}]},
-        config=st.session_state.memory_config
+        config=st.session_state.invoke_config,
     )
 
     agent_response_message = agent_response["messages"][-1].content
@@ -175,7 +203,7 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
                 Command(
                     resume=decisions.get("approve")
                 ),
-                config=st.session_state.memory_config
+                config=st.session_state.invoke_config
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
@@ -189,7 +217,7 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
                 Command(
                     resume=decisions.get("reject")
                 ),
-                config=st.session_state.memory_config
+                config=st.session_state.invoke_config
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
@@ -216,7 +244,7 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
                             }
                         ]
                     }),
-                config=st.session_state.memory_config 
+                config=st.session_state.invoke_config 
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
@@ -225,5 +253,3 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
             st.session_state["agent_responses"] = result
 
             st.rerun()
-
-st.write(st.session_state["agent_responses"])
