@@ -28,9 +28,10 @@ cd st_langchain_hitl_middleware
 uv sync
 ```
 
-3. Create a `.env` file with your OpenAI API key:
+3. Create a `.env` file with your API keys:
 ```bash
 echo "OPENAI_API_KEY=your_api_key_here" > .env
+echo "OPIK_API_KEY=your_opik_api_key_here" >> .env  # optional, for observability
 ```
 
 Note: this repo uses UV for dependency management (no requirements.txt). uv sync will read the lock/project files included in the repo.
@@ -54,6 +55,13 @@ The app will be available at http://localhost:8501
    - Edit — lets the user edit the suggested action arguments (in-progress)
 4. Conversation history and the agent/checkpointer/memory_config are preserved during the Streamlit session.
 
+### Enabling Observability with OPIK (optional)
+
+1. Toggle **Add observability** in the sidebar.
+2. Enter your OPIK project name (defaults to `Email_assistant_with_LangChain`).
+3. Enter your [OPIK API key](https://www.comet.com/opik/).
+4. All agent interactions will be traced and sent to your OPIK project for monitoring and analysis.
+
 ## Notebook
 
 An example notebook demonstrating the approval/interrupt workflow is included:
@@ -71,6 +79,14 @@ Open and run the notebook with your preferred Jupyter tooling to step through th
 - OpenAI GPT-4o-mini model for natural language understanding and email composition
 
 ## Changelog
+
+### v0.2.0 — Observability, UI improvements & cloud stability
+- Added optional OPIK observability via `OpikTracer` integration for LangChain
+- Fixed `opik.configure()` hanging on Streamlit Cloud by passing `api_key` and `automatic_approvals=True` to skip interactive prompts
+- Cached `OpikTracer` in session state to avoid redundant network calls on every rerun
+- Added sidebar Resources section with GitHub and Google Colab links
+- Added initial assistant greeting message on app load
+- Improved sidebar layout with navigation sections and links
 
 ### v0.1.1 — Approval workflow update
 - Added human-in-the-loop approval workflow to the Streamlit app:
