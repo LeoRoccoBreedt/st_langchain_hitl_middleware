@@ -129,7 +129,7 @@ with st.sidebar:
             os.environ["OPIK_API_KEY"] = opik_key
 
             if not st.session_state.get("opik_configured"):
-                opik.configure(use_local=False)
+                opik.configure(use_local=False, api_key=opik_key, automatic_approvals=True)
                 st.session_state["opik_configured"] = True
 
             if "opik_tracer" not in st.session_state or st.session_state.get("opik_project") != opik_project:
