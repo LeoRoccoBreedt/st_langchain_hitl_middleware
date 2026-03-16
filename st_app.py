@@ -110,6 +110,12 @@ with st.sidebar:
         import opik
         from opik.integrations.langchain import OpikTracer
 
+        opik_project = st.text_input(
+            "OPIK Project Name",
+            value=st.session_state.get("opik_project") or "Email_assistant_with_LangChain",
+            help="Name of the project in OPIK where traces will be sent"
+        )
+
         opik_key = st.text_input(
             "OPIK API Key",
             value=st.session_state.get("opik_key") or os.getenv("OPIK_API_KEY", ""),
@@ -123,7 +129,7 @@ with st.sidebar:
 
             opik.configure(use_local=False)
             # Set up the Opik tracer and store it in session state for use in agent config
-            opik_tracer = OpikTracer(project_name="Email_assistant_with_LangChain")
+            opik_tracer = OpikTracer(project_name=opik_project)
         else:            
             st.warning("Please enter your OPIK API key to enable observability.")
 
