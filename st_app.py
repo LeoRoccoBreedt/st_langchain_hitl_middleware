@@ -173,6 +173,15 @@ st.title("Email Assistant")
 
 # Create session state parameters
 st.session_state.history = st.session_state.get("history", [])
+
+if not st.session_state.history:
+    with st.chat_message("assistant"):
+        st.write(
+            "Hi! I'm your email assistant. I can help you **draft and send emails** — "
+            "just tell me who you'd like to email and what it's about.\n\n"
+            "Before anything is sent, I'll ask you to **approve, edit, or reject** the email, "
+            "so you're always in control."
+        )
 st.session_state.stage = st.session_state.get("stage", "input")
 st.session_state.agent_responses = st.session_state.get("agent_responses", [])
 #st.session_state["email"] = st.session_state.get("email", {"recipient": "", "subject": "", "body": ""})
