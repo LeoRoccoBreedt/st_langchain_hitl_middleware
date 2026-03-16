@@ -128,7 +128,9 @@ with st.sidebar:
             st.session_state["opik_key"] = opik_key
             os.environ["OPIK_API_KEY"] = opik_key
 
-            opik.configure(use_local=False)
+            if not st.session_state.get("opik_configured"):
+                opik.configure(use_local=False)
+                st.session_state["opik_configured"] = True
             # Set up the Opik tracer and store it in session state for use in agent config
             opik_tracer = OpikTracer(project_name=opik_project)
         else:
@@ -155,7 +157,12 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-#config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+st.title("Email Assistant")
+
+if not st.session_state.get("api_key"):
+    st.info("Enter your API key in the sidebar to get started.")
+    st.stop()
+
 # config and agent: create once and keep in session_state so reruns don't recreate them
 if "checkpointer" not in st.session_state:
     st.session_state["checkpointer"] = InMemorySaver()
@@ -168,8 +175,6 @@ if "agent" not in st.session_state:
         middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject", "edit"]}})],
         checkpointer=st.session_state["checkpointer"],
     )
-
-st.title("Email Assistant")
 
 # Create session state parameters
 st.session_state.history = st.session_state.get("history", [])
