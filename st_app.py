@@ -131,8 +131,12 @@ with st.sidebar:
             if not st.session_state.get("opik_configured"):
                 opik.configure(use_local=False)
                 st.session_state["opik_configured"] = True
-            # Set up the Opik tracer and store it in session state for use in agent config
-            opik_tracer = OpikTracer(project_name=opik_project)
+
+            if "opik_tracer" not in st.session_state or st.session_state.get("opik_project") != opik_project:
+                st.session_state["opik_project"] = opik_project
+                st.session_state["opik_tracer"] = OpikTracer(project_name=opik_project)
+
+            opik_tracer = st.session_state["opik_tracer"]
         else:
             st.warning("Please enter your OPIK API key to enable observability.")
 
