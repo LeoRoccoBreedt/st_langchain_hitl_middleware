@@ -1,6 +1,6 @@
 [project]
 name = "st-langchain-hitl-middleware"
-version = "0.1.0"
+version = "0.3.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,7 +8,19 @@ dependencies = [
     "ipykernel>=7.1.0",
     "langchain>=1.0.3",
     "langchain-openai>=1.0.2",
+    "langchain-ollama>=0.3.0",
+    "ollama>=0.4.0",
     "opik>=1.10.39",
     "python-dotenv>=1.2.1",
     "streamlit>=1.51.0",
+]
+
+[project.optional-dependencies]
+groq = ["langchain-groq>=0.3.0"]
+anthropic = ["langchain-anthropic>=0.3.0"]
+google = ["langchain-google-genai>=2.0.0"]
+all = [
+    "langchain-groq>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-google-genai>=2.0.0",
 ]

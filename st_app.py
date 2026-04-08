@@ -1,30 +1,88 @@
 import streamlit as st
-
-# LangChain code
-from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
-from langchain_core.tools import tool
-from langchain.agents.middleware import HumanInTheLoopMiddleware
-
-from langgraph.checkpoint.memory import InMemorySaver 
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 import uuid
-import os
 
 from dotenv import load_dotenv
 load_dotenv()
 
-@tool()
-def send_email(recipient: str, subject: str, body: str) -> str:
-    """Send an email to a recipient.
-    Args:
-        recipient: Email address of the recipient.
-        subject: Subject line of the email.
-        body: Body content of the email.
-    Returns:
-        Confirmation message.
-    """
-    return f"Email sent successfully to {recipient}, regarding '{subject}'."
+from src.llm import get_llm, get_models, is_cloud, PROVIDER_DEFAULTS, REQUIRES_API_KEY
+from src.agent import create_email_agent
+from src.decisions import decisions
+
+
+# ---------------------------------------------------------------------------
+# Sidebar callbacks
+# ---------------------------------------------------------------------------
+
+_SESSION_KEYS = [
+    "agent", "checkpointer", "history", "stage", "email", "email_edited",
+    "agent_responses", "invoke_config", "available_models", "models_error",
+    "api_key", "provider", "ollama_connected",
+]
+
+
+def _reset_session():
+    """Clear all app state for a fresh session."""
+    for key in _SESSION_KEYS:
+        st.session_state.pop(key, None)
+
+
+def _on_provider_change():
+    _reset_session()
+
+
+def _on_key_change():
+    """Fetch models when the API key changes; start a fresh session."""
+    key = st.session_state.get("_api_key_input", "").strip()
+    provider = st.session_state.get("_provider_select", list(PROVIDER_DEFAULTS.keys())[0])
+
+    _reset_session()
+
+    if not key:
+        return
+
+    try:
+        models = get_models(provider, key)
+        st.session_state["available_models"] = models
+        st.session_state["api_key"] = key
+        st.session_state["provider"] = provider
+    except Exception as e:
+        st.session_state["models_error"] = str(e)
+
+
+def _on_ollama_connect():
+    """Fetch local Ollama models and start a fresh session."""
+    provider = "Ollama"
+    _reset_session()
+
+    try:
+        models = get_models(provider)
+        st.session_state["available_models"] = models
+        st.session_state["ollama_connected"] = True
+        st.session_state["api_key"] = ""
+        st.session_state["provider"] = provider
+    except Exception as e:
+        st.session_state["models_error"] = str(e)
+        st.session_state["ollama_connected"] = False
+
+
+def _on_model_change():
+    """Reset chat session when selected model changes, keeping connection state."""
+    available = st.session_state.get("available_models")
+    provider = st.session_state.get("provider")
+    api_key = st.session_state.get("api_key")
+    ollama_connected = st.session_state.get("ollama_connected")
+    _reset_session()
+    st.session_state["available_models"] = available
+    st.session_state["provider"] = provider
+    st.session_state["api_key"] = api_key
+    st.session_state["ollama_connected"] = ollama_connected
+
+
+# ---------------------------------------------------------------------------
+# Email edit dialog
+# ---------------------------------------------------------------------------
 
 @st.dialog("Edit Email", width="medium")
 def edit_email():
@@ -41,71 +99,72 @@ def edit_email():
             "subject": subject,
             "body": body,
         }
-        st.session_state["email_edited"] = True  # Set the flag to indicate the email was edited
-        st.rerun()  # Rerun to update the state
+        st.session_state["email_edited"] = True
+        st.rerun()
 
-# Choose decision
-# Approval decision
-approval = {
-    "decisions": [
-        {
-            "type": "approve"
-        }
-    ]
-}
 
-# Decisions to parse to tool interruption
-# Edit decision
-edit = {
-    "decisions": [
-        {
-            "type": "edit",
-            "edited_action": {
-                "name": "send_email",
-                "args": {
-                    "recipient": "partner@startup.com",
-                    "subject": "Budget proposal for Q1 2026",
-                    "body": "I can only approve up to 500k, please send over details.",
-                }
-            }
-        }
-    ]
-}
-
-# Reject decision
-reject = {
-    "decisions": [
-        {
-            "type": "reject",
-            "message": "Do not send an email. The email needs more context or additionans from the user."
-        }
-    ]
-}
-# single dictionary to index into and return the correct dict
-decisions = {
-    "approve": approval,
-    "edit": edit,
-    "reject": reject,
-}
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
 
 with st.sidebar:
     st.header("Model provider", divider="grey")
-    model_provider = st.selectbox("Select provider", options=["OpenAI", "Claude"])
-    api_key = st.text_input(
-        model_provider + " API key",
-        value=st.session_state.get("api_key") or os.getenv("OPENAI_API_KEY", ""),
-        type="password",
-        icon=":material/password:")
-    
-    #Set session state for use of API and the environment variable for the create_agent
-    if api_key:
-        st.session_state["api_key"] = api_key
+
+    providers = list(PROVIDER_DEFAULTS.keys())
+    default_provider = "OpenAI" if is_cloud() else "Ollama"
+    default_provider_idx = providers.index(default_provider)
+
+    provider = st.selectbox(
+        "Select provider",
+        options=providers,
+        index=default_provider_idx,
+        key="_provider_select",
+        on_change=_on_provider_change,
+    )
+
+    if provider in REQUIRES_API_KEY:
+        st.text_input(
+            f"{provider} API key",
+            value="",
+            type="password",
+            icon=":material/password:",
+            key="_api_key_input",
+            on_change=_on_key_change,
+        )
     else:
-        st.warning("Please enter your OpenAI API key to use the app.")
+        # Ollama — no key needed, connect directly to local server
+        if st.button("Connect to Ollama", on_click=_on_ollama_connect):
+            pass
+
+    if st.session_state.get("models_error"):
+        st.error(f"Could not connect: {st.session_state['models_error']}")
+    elif st.session_state.get("available_models"):
+        available = st.session_state["available_models"]
+        default = PROVIDER_DEFAULTS.get(provider)
+        default_idx = available.index(default) if default in available else 0
+        st.selectbox(
+            "Model",
+            options=available,
+            index=default_idx,
+            key="_model_select",
+            on_change=_on_model_change,
+        )
+        st.success(f"Connected — {len(available)} models available")
+    elif provider == "Ollama" and st.session_state.get("ollama_connected"):
+        st.warning("No models found. Pull one first, e.g.:\n```\nollama pull llama3.2\n```")
+    else:
+        if provider in REQUIRES_API_KEY:
+            st.warning(f"Enter your {provider} API key to load models.")
+        else:
+            st.warning("Click 'Connect to Ollama' to load local models.")
 
     st.header("Observability by OPIK", divider="grey")
     st.markdown("[What is OPIK?](https://www.comet.com/docs/opik/)", unsafe_allow_html=True)
-    observe = st.toggle("Add observability", value=False, help="Enable to send traces of agent interactions to OPIK for monitoring and analysis")
+    observe = st.toggle(
+        "Add observability",
+        value=False,
+        help="Enable to send traces of agent interactions to OPIK for monitoring and analysis",
+    )
 
     if observe:
         import opik
@@ -114,14 +173,14 @@ with st.sidebar:
         opik_project = st.text_input(
             "OPIK Project Name",
             value=st.session_state.get("opik_project") or "Email_assistant_with_LangChain",
-            help="Name of the project in OPIK where traces will be sent"
+            help="Name of the project in OPIK where traces will be sent",
         )
 
         opik_key = st.text_input(
             "OPIK API Key",
-            value=st.session_state.get("opik_key") or os.getenv("OPIK_API_KEY", ""),
+            value=st.session_state.get("opik_key", ""),
             type="password",
-            icon=":material/password:"
+            icon=":material/password:",
         )
 
         if opik_key:
@@ -157,32 +216,51 @@ with st.sidebar:
             </a>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Main app
+# ---------------------------------------------------------------------------
 
 st.title("Email Assistant")
 
-if not st.session_state.get("api_key"):
-    st.info("Enter your API key in the sidebar to get started.")
+_ready = st.session_state.get("available_models") and st.session_state.get("provider")
+if not _ready:
+    st.info("Select a provider and connect in the sidebar to get started.")
     st.stop()
 
-# config and agent: create once and keep in session_state so reruns don't recreate them
+# Initialise checkpointer and agent once per session (or after provider change)
 if "checkpointer" not in st.session_state:
     st.session_state["checkpointer"] = InMemorySaver()
 
 if "agent" not in st.session_state:
-    model = ChatOpenAI(model="gpt-4o-mini", api_key=st.session_state["api_key"])
-    st.session_state["agent"] = create_agent(
-        model=model,
-        tools=[send_email],
-        system_prompt="You are a helpful email assistant for Leo. Always return a message to the user confirming the action taken.",
-        middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": {"allowed_decisions": ["approve", "reject", "edit"]}})],
-        checkpointer=st.session_state["checkpointer"],
+    provider = st.session_state["provider"]
+    # _model_select is set by the widget; fall back to the provider default
+    selected_model = (
+        st.session_state.get("_model_select")
+        or PROVIDER_DEFAULTS.get(provider)
     )
+    llm = get_llm(
+        provider=provider,
+        model=selected_model,
+        api_key=st.session_state.get("api_key", ""),
+    )
+    st.session_state["agent"] = create_email_agent(llm, st.session_state["checkpointer"])
 
-# Create session state parameters
+# Session state defaults
 st.session_state.history = st.session_state.get("history", [])
+st.session_state.stage = st.session_state.get("stage", "input")
+st.session_state.agent_responses = st.session_state.get("agent_responses", [])
+st.session_state.setdefault("email", {"recipient": "", "subject": "", "body": ""})
 
+st.session_state["invoke_config"] = {
+    "configurable": st.session_state.get("invoke_config", {}).get("configurable") or {"thread_id": str(uuid.uuid4())},
+    "callbacks": [opik_tracer] if observe and "opik_tracer" in dir() else [],
+}
+
+# Welcome message
 if not st.session_state.history:
     with st.chat_message("assistant"):
         st.write(
@@ -191,26 +269,18 @@ if not st.session_state.history:
             "Before anything is sent, I'll ask you to **approve, edit, or reject** the email, "
             "so you're always in control."
         )
-st.session_state.stage = st.session_state.get("stage", "input")
-st.session_state.agent_responses = st.session_state.get("agent_responses", [])
-#st.session_state["email"] = st.session_state.get("email", {"recipient": "", "subject": "", "body": ""})
-# ensure there's always an 'email' dict in session_state
-st.session_state.setdefault("email", {"recipient": "", "subject": "", "body": ""})
-
-# initialize invoke_config only if missing
-st.session_state["invoke_config"] = {
-    "configurable": st.session_state.get("invoke_config", {}).get("configurable") or {"thread_id": str(uuid.uuid4())},
-    "callbacks": [opik_tracer] if observe and 'opik_tracer' in dir() else []
-}
 
 for message in st.session_state.history:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
+# ---------------------------------------------------------------------------
+# Chat input
+# ---------------------------------------------------------------------------
+
 if user_input := st.chat_input("Ask me to send an email"):
     st.session_state.history.append({"role": "user", "content": user_input})
 
-    # use the stored agent when invoking
     agent = st.session_state["agent"]
     agent_response = agent.invoke(
         {"messages": [{"role": "user", "content": user_input}]},
@@ -219,26 +289,24 @@ if user_input := st.chat_input("Ask me to send an email"):
 
     agent_response_message = agent_response["messages"][-1].content
     if "__interrupt__" in agent_response:
-        action_request = agent_response['__interrupt__'][-1].value['action_requests'][-1]
-        recipient = action_request['args']['recipient']
-        subject = action_request['args']['subject']
-        body = action_request['args']['body']
+        action_request = agent_response["__interrupt__"][-1].value["action_requests"][-1]
+        recipient = action_request["args"]["recipient"]
+        subject = action_request["args"]["subject"]
+        body = action_request["args"]["body"]
         agent_response_message = f"**To:** {recipient}\n\n**Subject:** {subject}\n\n**Body:**\n\n{body}"
         st.session_state.stage = "intervention"
+        st.session_state["email"] = {"recipient": recipient, "subject": subject, "body": body}
 
-        st.session_state["email"] = {
-            "recipient": recipient,
-            "subject": subject,
-            "body": body,
-        }
-    
     st.session_state.history.append({"role": "assistant", "content": agent_response_message})
     st.session_state.agent_responses = agent_response
     st.rerun()
 
+# ---------------------------------------------------------------------------
+# HITL intervention buttons
+# ---------------------------------------------------------------------------
+
 if "__interrupt__" in st.session_state.agent_responses and st.session_state.stage == "intervention":
-    # Extract initial AI message requiring human intervention
-    description = st.session_state.agent_responses['__interrupt__'][-1].value['action_requests'][-1]
+    description = st.session_state.agent_responses["__interrupt__"][-1].value["action_requests"][-1]
     st.warning(f"Human intervention required for tool: {description['name']}")
 
     buttons = st.columns(6)
@@ -246,10 +314,8 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
         if st.button("Approve", key="approve", type="primary", width="stretch", help="Approve the email"):
             agent = st.session_state["agent"]
             result = agent.invoke(
-                Command(
-                    resume=decisions.get("approve")
-                ),
-                config=st.session_state.invoke_config
+                Command(resume=decisions.get("approve")),
+                config=st.session_state.invoke_config,
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
@@ -260,10 +326,8 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
         if st.button("Reject", key="reject", type="secondary", width="stretch", help="Reject the email"):
             agent = st.session_state["agent"]
             result = agent.invoke(
-                Command(
-                    resume=decisions.get("reject")
-                ),
-                config=st.session_state.invoke_config
+                Command(resume=decisions.get("reject")),
+                config=st.session_state.invoke_config,
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
@@ -274,28 +338,26 @@ if "__interrupt__" in st.session_state.agent_responses and st.session_state.stag
             st.session_state["email_edited"] = False
             edit_email()
 
-        # Only proceed if user actually confirmed the edit
         if st.session_state.get("email_edited"):
             agent = st.session_state["agent"]
             result = agent.invoke(
                 Command(
-                    resume = {
+                    resume={
                         "decisions": [
                             {
                                 "type": "edit",
                                 "edited_action": {
                                     "name": "send_email",
-                                    "args": st.session_state["email"]
-                                }
+                                    "args": st.session_state["email"],
+                                },
                             }
                         ]
-                    }),
-                config=st.session_state.invoke_config 
+                    }
+                ),
+                config=st.session_state.invoke_config,
             )
             st.session_state.history.append({"role": "assistant", "content": result["messages"][-1].content})
             st.session_state.stage = "input"
             st.success("Email edited and sent!")
-
             st.session_state["agent_responses"] = result
-
             st.rerun()
